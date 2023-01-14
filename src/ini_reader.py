@@ -11,10 +11,6 @@ class IniReader:
     def __init__(self) -> None:
         pass
 
-    class States:
-        Property = 0
-        Value = 1
-        Newline = 2
     
     @classmethod
     def read_file(cls, path: Path) -> list[Section]:
@@ -48,6 +44,7 @@ class IniReader:
         IN_PROPERTY = True
         IN_SINGLE_COMMENT = False
         IN_MULTI_COMMENT = False
+        ML_MULTIPLE_LINE = False
 
         sec = Section()
         max_ind = len(content) - 1
@@ -56,9 +53,12 @@ class IniReader:
 
             IN_COMMENT = IN_SINGLE_COMMENT or IN_MULTI_COMMENT
             if IN_COMMENT:
-                if IN_SINGLE_COMMENT and char == "\n":
-                    IN_SINGLE_COMMENT = False
-                    IN_COMMENT = IN_MULTI_COMMENT
+                if char == "\n":
+                    if IN_MULTI_COMMENT:
+                        ML_MULTIPLE_LINE = True
+                    if IN_SINGLE_COMMENT:
+                        IN_SINGLE_COMMENT = False
+                        IN_COMMENT = IN_MULTI_COMMENT
                 elif (char not in ('/', '*')):
                     cur_section_comment += char
                 elif IN_MULTI_COMMENT:
@@ -69,6 +69,9 @@ class IniReader:
                             comments.append((start, end, content[start:end]))
                             sec.comment += content[start:end-1]
                             IN_MULTI_COMMENT = len(comment_stack) > 0
+                
+                
+
                     
 
 
@@ -93,7 +96,7 @@ class IniReader:
                     elif (char == "*" and content[i-1] == "/" and not IN_SINGLE_COMMENT):
                         cur_property = cur_property[:-2]
                         IN_MULTI_COMMENT = True
-                        # comment_stack.append(i-1)
+                        comment_stack.append(i-1)
                     elif (char in ("=", "\n")):
                         IN_PROPERTY = False
                         cur_property = cur_property.strip()
@@ -103,13 +106,14 @@ class IniReader:
                     cur_value += char
                     if (char == "/" and content[i-1] == "/"):
                         IN_SINGLE_COMMENT = True
-                        cur_value = cur_value[:-1]
+                        cur_value = cur_value[:-2]
                     elif (char == "*" and content[i-1] == "/"):
-                        cur_property = cur_value[:-1]
+                        cur_value = cur_value[:-2]
                         IN_MULTI_COMMENT = True
                         comment_stack.append(i-1)
                 
-            if (char == '\n' and not IN_MULTI_COMMENT) or i == max_ind:
+            if ((char == '\n' or ML_MULTIPLE_LINE) and not IN_MULTI_COMMENT) or i == max_ind:
+                ML_MULTIPLE_LINE = False
                 if cur_property:
                     sec.property = cur_property.strip()
                     cur_property = ""
@@ -175,113 +179,3 @@ class IniReader:
 
 
             
-
-
-
-
-
-    @classmethod
-    def get_line_data(cls, line: str):
-        # get indent
-        indent = cls.get_line_indent(line)
-
-        # prepare to read the string for indexes
-        sl_cmt = None
-        ml_cmt = []
-        eq_ind = None
-       
-        open_block_comments = 0
-        property_ind = None
-        value_ind = None
-        property = None
-        value = None
-
-        # parse the line:
-        #   get the indexes of important characters
-        #   get the property and value
-        sl_cmt
-        preceding_slash = False
-        preceding_star = False
-        
-
-
-        max_ind = len(line) - 1
-        for i, char in enumerate(line):
-            # write comment if we're in a block comment
-            if (open_block_comments > 0):
-                comment += char
-            # check for comments
-            if char == "/":
-                if preceding_slash:
-                    sl_cmt = i
-                    sl_comment = line[sl_cmt-1:]
-                elif preceding_star:
-                    preceding_star = False
-                    ml_cmt.append(("close", i))
-                    comment = comment[:-2]
-                    open_block_comments -= 1
-
-                preceding_slash = True
-                continue
-            elif char == "*":
-                preceding_star = True
-                if preceding_slash:
-                    open_block_comments += 1
-                    ml_cmt.append(("open", i - 1))
-                continue
-            elif char == "=":
-                if (not eq_ind): eq_ind = i
-                if (property_ind):
-                    property = line[property_ind:i].strip()
-            elif char.isspace():
-                pass
-            elif (eq_ind):
-                if (not value_ind and open_block_comments <= 0):
-                    value_ind = i
-            else:
-                if (not property_ind and open_block_comments <= 0):
-                    property_ind = i
-                    continue
-
-            if(i == max_ind):
-                if (property_ind and not eq_ind):
-                    property = line[property_ind-1:i+1].strip()
-                elif (eq_ind and value_ind):
-                    value = line[value_ind-1:i+1].strip()
-            
-            preceding_star = False
-            preceding_slash = False
-
-
-        # dot notation is a blessing
-        res = DotDict()
-        res.indent = indent
-        res.has_sl_comment = bool(sl_cmt)
-        res.block_comments = ml_cmt
-        res.open_block_change = open_block_comments
-        res.property = property
-        res.value = value
-        res.isDataModule = bool(property == "DataModule")
-        res.comment = comment
-
-        return res
-
-    @classmethod
-    def get_line_indent(cls, line: str):
-
-        pre = len(line) - len(line.lstrip())
-
-        indent = 0
-        spaces = 0
-        for i in range(pre):
-            if line[i] == " ":
-                spaces += 1
-            else:
-                indent += 1
-
-            if spaces == 4:
-                indent += 1
-                spaces = 0
-            # assume it's a tab character. should we be seeing anything else?
-
-        return indent

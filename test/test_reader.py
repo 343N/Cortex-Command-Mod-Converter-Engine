@@ -1,3 +1,4 @@
+from src.ini_writer import IniWriter
 from src.ini_reader import IniReader
 from pathlib import Path
 import unittest
@@ -15,12 +16,15 @@ class TestReader(unittest.TestCase):
         TEST_DIR = Path("test/reader")
         IN_SUFFIX = "_in.ini"
         OUT_SUFFIX = "_out.ini"
+        TEST_SUFFIX = "_result.ini"
         
         for file in TEST_DIR.iterdir():
             if file.name.endswith(IN_SUFFIX):
                 print(f"Testing {file.name}")
-                section_tree = IniReader.read_file(file)
-                print(section_tree)
+                test_name = file.name.replace(IN_SUFFIX, "")
+                section_tree, prop_dict, val_dict = IniReader.read_file(file)
+                IniWriter.write_sections(TEST_DIR / f"{test_name}{TEST_SUFFIX}", section_tree)
+
             
     # def test_1(self):
     #     # result = IniReader.get_line_data("   \tAddActor = ACDropShip").to_dict()
